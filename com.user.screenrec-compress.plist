@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+
+  <key>Label</key>
+  <string>com.user.screenrec-compress</string>
+
+  <!-- Fire whenever anything in the watched directory changes. -->
+  <!-- launchd's trigger is coarse ("something changed"), not per-file.  -->
+  <!-- compress.sh handles this by scanning the directory and skipping   -->
+  <!-- already-compressed files, so re-running on every trigger is safe. -->
+  <key>WatchPaths</key>
+  <array>
+    <!-- EDIT: set this to the absolute path of your Screen Recordings folder. -->
+    <string>/Volumes/YOUR_DRIVE/Screen Recordings</string>
+  </array>
+
+  <key>ProgramArguments</key>
+  <array>
+    <!-- EDIT: set this to the absolute path of compress.sh on this machine. -->
+    <string>/Users/YOUR_USERNAME/Projects/screenrec-compress/compress.sh</string>
+    <!-- EDIT: same path as WatchPaths above. -->
+    <string>/Volumes/YOUR_DRIVE/Screen Recordings</string>
+  </array>
+
+  <!-- launchd runs agents in a minimal environment with no PATH.         -->
+  <!-- We set it explicitly so ffmpeg (Homebrew) and bash can be found.  -->
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
+  </dict>
+
+  <key>StandardOutPath</key>
+  <!-- EDIT: set this to wherever you want the log to live. -->
+  <string>/Users/YOUR_USERNAME/Library/Logs/screenrec-compress.log</string>
+
+  <key>StandardErrorPath</key>
+  <string>/Users/YOUR_USERNAME/Library/Logs/screenrec-compress.log</string>
+
+  <!-- Do not run immediately on load — only fire on WatchPaths changes. -->
+  <key>RunAtLoad</key>
+  <false/>
+
+</dict>
+</plist>

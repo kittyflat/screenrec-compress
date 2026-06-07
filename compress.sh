@@ -25,10 +25,10 @@
 #   Video: H.264 / libx264 (fast, universally compatible).
 #   Audio: AAC 96k mono (clear for voice, smaller files).
 #
-# NOTE — "smaller but slower" alternative:
-#   Replace: -c:v libx264
-#   With:    -c:v libx265  (and tune CRF, e.g. 25–28)
-#   HEVC is typically 20–40% smaller at the same quality, but encodes much slower.
+# NOTE — faster but larger alternative:
+#   Replace: -c:v libx265
+#   With:    -c:v libx264 -tune stillimage  (and set CRF to 20)
+#   H.264 encodes faster but files are typically 20–40% larger at equivalent quality.
 #
 # Compatibility:
 #   Written for macOS default Bash 3.2 (no mapfile/readarray). Works on Bash 5 too.
@@ -125,7 +125,7 @@ for f in "${files[@]}"; do
   # -ac 1             mono audio — great for meetings, saves space
   # -movflags +faststart  better streaming / quick start from cloud drives
   ffmpeg -nostdin -hide_banner -loglevel error -i "$f" \
-    -c:v libx264 -preset slow -crf 20 -tune stillimage -pix_fmt yuv420p -threads 0 \
+    -c:v libx265 -preset slow -crf 26 -pix_fmt yuv420p -threads 0 \
     -fps_mode vfr \
     -c:a aac -b:a 96k -ac 1 \
     -movflags +faststart \

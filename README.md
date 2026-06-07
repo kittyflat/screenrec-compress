@@ -32,14 +32,13 @@ version.
 
 | Setting | Value | Rationale |
 |---|---|---|
-| Codec | H.264 / libx264 | Fast, universally compatible |
-| CRF | 20 | Good balance for readable UI text |
-| Tune | stillimage | Preserves sharp edges (slides, UI) |
+| Codec | HEVC / libx265 | 20–40% smaller than H.264 at equivalent quality |
+| CRF | 26 | Good balance for readable UI text |
 | Frame rate | VFR | Reduces size on static sections |
 | Audio | AAC 96k mono | Clear for voice, smaller files |
 
-**Smaller but slower:** swap `libx264` for `libx265` (HEVC) and set CRF to
-25–28. Typically 20–40% smaller at equivalent quality, but encodes much slower.
+**Faster but larger:** swap `libx265` for `libx264`, add `-tune stillimage`, and
+set CRF to 20. Encodes faster but files are typically 20–40% larger.
 
 ## Automatic compression with launchd (macOS)
 

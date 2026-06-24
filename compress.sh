@@ -11,6 +11,7 @@
 #   --dry-run        Show what would be compressed without doing anything.
 #   --force          Reprocess files that already have a compressed version.
 #   --preset PRESET  ffmpeg preset (default: slow). Use fast for quicker encodes.
+#   --progress       Show live ffmpeg encoding progress (time, speed, bitrate).
 #   -h, --help       Show this message.
 #
 # Goals:
@@ -36,7 +37,8 @@
 
 set -euo pipefail
 
-trap 'echo "Interrupted. Exiting batch."; exit 130' INT
+current_tmp=""
+trap 'echo "Interrupted. Exiting batch."; [[ -n "$current_tmp" ]] && rm -f "$current_tmp"; exit 130' INT
 
 # -----------------------------------------------------------------------------
 # Defaults
@@ -44,6 +46,7 @@ trap 'echo "Interrupted. Exiting batch."; exit 130' INT
 dry_run=false
 force=false
 preset="slow"
+progress=false
 target_dir="."
 
 # -----------------------------------------------------------------------------
@@ -51,9 +54,10 @@ target_dir="."
 # -----------------------------------------------------------------------------
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --dry-run) dry_run=true ;;
-    --force)   force=true ;;
-    --preset)  shift; preset="$1" ;;
+    --dry-run)  dry_run=true ;;
+    --force)    force=true ;;
+    --preset)   shift; preset="$1" ;;
+    --progress) progress=true ;;
     -h|--help)
       sed -n '3,/^[^#]/{ /^#/{ s/^# \{0,1\}//; p }; /^[^#]/q }' "$0"
       exit 0
@@ -128,6 +132,9 @@ for f in "${files[@]}"; do
     continue
   fi
 
+  tmp="$(dirname "$out")/.$(basename "$out").tmp"
+  current_tmp="$tmp"
+
   echo "$f"
   echo "  -> $out"
 
@@ -140,14 +147,25 @@ for f in "${files[@]}"; do
   #                   (remove if you see A/V sync issues in a specific player)
   # -ac 1             mono audio — great for meetings, saves space
   # -movflags +faststart  better streaming / quick start from cloud drives
-  ffmpeg -nostdin -hide_banner -loglevel error -i "$f" \
-    -c:v libx265 -preset "$preset" -crf 24 -pix_fmt yuv420p -tag:v hvc1 -threads 0 \
-    -fps_mode vfr \
-    -c:a aac -b:a 96k -ac 1 \
-    -movflags +faststart \
-    "$out"
+  if $progress; then
+    ffmpeg -nostdin -hide_banner -i "$f" \
+      -c:v libx265 -preset "$preset" -crf 24 -pix_fmt yuv420p -tag:v hvc1 -threads 0 \
+      -fps_mode vfr \
+      -c:a aac -b:a 96k -ac 1 \
+      -movflags +faststart \
+      "$tmp"
+  else
+    ffmpeg -nostdin -hide_banner -loglevel error -i "$f" \
+      -c:v libx265 -preset "$preset" -crf 24 -pix_fmt yuv420p -tag:v hvc1 -threads 0 \
+      -fps_mode vfr \
+      -c:a aac -b:a 96k -ac 1 \
+      -movflags +faststart \
+      "$tmp"
+  fi
 
-  touch -r "$f" "$out"
+  touch -r "$f" "$tmp"
+  mv "$tmp" "$out"
+  current_tmp=""
 done
 
 if $dry_run; then

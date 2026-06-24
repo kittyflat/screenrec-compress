@@ -66,25 +66,37 @@ while [[ $# -gt 0 ]]; do
   shift
 done
 
-if [[ ! -d "$target_dir" ]]; then
-  echo "Directory not found: $target_dir" >&2
-  exit 1
-fi
-
 suffix=" - compressed.mp4"
 
 # -----------------------------------------------------------------------------
 # Build file list: oldest -> newest, skipping already-compressed files
 # -----------------------------------------------------------------------------
 files=()
-while IFS= read -r f; do
+
+if [[ -f "$target_dir" ]]; then
+  # Single file passed
+  f="$target_dir"
+  if [[ "$f" != *.mp4 ]]; then
+    echo "Not an .mp4 file: $f" >&2
+    exit 1
+  fi
+  case "$f" in
+    *"$suffix") echo "Already a compressed file: $f" >&2; exit 1 ;;
+  esac
   files+=("$f")
-done < <(
-  ls -tU "$target_dir"/*.mp4 2>/dev/null \
-    | tail -r \
-    | grep -vF "$suffix" \
-    || true
-)
+elif [[ -d "$target_dir" ]]; then
+  while IFS= read -r f; do
+    files+=("$f")
+  done < <(
+    ls -tU "$target_dir"/*.mp4 2>/dev/null \
+      | tail -r \
+      | grep -vF "$suffix" \
+      || true
+  )
+else
+  echo "Not a file or directory: $target_dir" >&2
+  exit 1
+fi
 
 if [[ ${#files[@]} -eq 0 ]]; then
   echo "No .mp4 files found (or only already-compressed files)."

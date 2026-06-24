@@ -33,7 +33,8 @@ version.
 | Setting | Value | Rationale |
 |---|---|---|
 | Codec | HEVC / libx265 | 20–40% smaller than H.264 at equivalent quality |
-| CRF | 26 | Good balance for readable UI text |
+| CRF | 24 | Good balance for sharp UI text; 26+ can blur fine fonts |
+| Tag | hvc1 | Required for QuickTime / Apple device playback |
 | Frame rate | VFR | Reduces size on static sections |
 | Audio | AAC 96k mono | Clear for voice, smaller files |
 

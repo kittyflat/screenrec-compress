@@ -118,14 +118,15 @@ for f in "${files[@]}"; do
 
   # ffmpeg flags:
   # -nostdin          don't read stdin (important in batch loops)
-  # -crf 20           good balance for readable text in UI/screen recordings
-  # -tune stillimage  preserves sharp edges (UI, slides)
+  # -crf 24           good balance for readable text in UI/screen recordings;
+  #                   lower = sharper text, larger file (26+ can blur fine text)
+  # -tag:v hvc1       Apple devices require hvc1 (not the default hev1) for HEVC
   # -fps_mode vfr     variable frame rate; reduces size on static sections
   #                   (remove if you see A/V sync issues in a specific player)
   # -ac 1             mono audio — great for meetings, saves space
   # -movflags +faststart  better streaming / quick start from cloud drives
   ffmpeg -nostdin -hide_banner -loglevel error -i "$f" \
-    -c:v libx265 -preset slow -crf 26 -pix_fmt yuv420p -threads 0 \
+    -c:v libx265 -preset slow -crf 24 -pix_fmt yuv420p -tag:v hvc1 -threads 0 \
     -fps_mode vfr \
     -c:a aac -b:a 96k -ac 1 \
     -movflags +faststart \

@@ -8,9 +8,10 @@
 #   DIR defaults to the current directory if omitted.
 #
 # Options:
-#   --dry-run    Show what would be compressed without doing anything.
-#   --force      Reprocess files that already have a compressed version.
-#   -h, --help   Show this message.
+#   --dry-run        Show what would be compressed without doing anything.
+#   --force          Reprocess files that already have a compressed version.
+#   --preset PRESET  ffmpeg preset (default: slow). Use fast for quicker encodes.
+#   -h, --help       Show this message.
 #
 # Goals:
 #   - Reduce storage size while keeping on-screen text readable and meeting audio clear.
@@ -42,6 +43,7 @@ trap 'echo "Interrupted. Exiting batch."; exit 130' INT
 # -----------------------------------------------------------------------------
 dry_run=false
 force=false
+preset="slow"
 target_dir="."
 
 # -----------------------------------------------------------------------------
@@ -51,6 +53,7 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     --dry-run) dry_run=true ;;
     --force)   force=true ;;
+    --preset)  shift; preset="$1" ;;
     -h|--help)
       sed -n '3,/^[^#]/{ /^#/{ s/^# \{0,1\}//; p }; /^[^#]/q }' "$0"
       exit 0
@@ -138,7 +141,7 @@ for f in "${files[@]}"; do
   # -ac 1             mono audio — great for meetings, saves space
   # -movflags +faststart  better streaming / quick start from cloud drives
   ffmpeg -nostdin -hide_banner -loglevel error -i "$f" \
-    -c:v libx265 -preset slow -crf 24 -pix_fmt yuv420p -tag:v hvc1 -threads 0 \
+    -c:v libx265 -preset "$preset" -crf 24 -pix_fmt yuv420p -tag:v hvc1 -threads 0 \
     -fps_mode vfr \
     -c:a aac -b:a 96k -ac 1 \
     -movflags +faststart \

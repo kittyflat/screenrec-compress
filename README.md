@@ -9,6 +9,9 @@ and meeting audio clear while significantly reducing file size.
 # compress all .mp4 files in a directory
 compress.sh /path/to/recordings
 
+# compress a single file
+compress.sh /path/to/recording.mp4
+
 # current directory
 compress.sh
 
@@ -17,12 +20,25 @@ compress.sh --dry-run /path/to/recordings
 
 # reprocess files that already have a compressed version
 compress.sh --force /path/to/recordings
+
+# use Apple hardware encoder (~5x faster, ~3x larger files)
+compress.sh --encoder videotoolbox /path/to/recordings
+
+# software encoder with faster preset (default is slow)
+compress.sh --encoder libx265:fast /path/to/recordings
+
+# show live encoding progress
+compress.sh --progress /path/to/recording.mp4
 ```
 
 Output files are written alongside the originals with a ` - compressed.mp4`
 suffix, so you can verify quality before deleting the originals. The script is
 idempotent — safe to re-run; it skips files that already have a compressed
 version.
+
+In directory mode, the script re-scans after each file completes to pick up
+any new files that arrived during encoding. A lockfile prevents concurrent
+instances — only one runs at a time.
 
 ## Requirements
 
@@ -38,8 +54,10 @@ version.
 | Frame rate | VFR | Reduces size on static sections |
 | Audio | AAC 96k mono | Clear for voice, smaller files |
 
-**Faster but larger:** swap `libx265` for `libx264`, add `-tune stillimage`, and
-set CRF to 20. Encodes faster but files are typically 20–40% larger.
+**Faster encoding:** use `--encoder videotoolbox` to use Apple's hardware HEVC
+encoder. ~5x faster than software but produces ~3x larger files. Good enough
+quality for most screen recordings; use the default `libx265` when file size
+or text sharpness matters.
 
 ## Automatic compression with launchd (macOS)
 

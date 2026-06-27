@@ -29,13 +29,8 @@
 #   - Idempotent: safe to re-run; skips already-compressed files (unless --force).
 #
 # Codec choices:
-#   Video: H.264 / libx264 (fast, universally compatible).
+#   Video: HEVC / libx265 (best quality and compression for screen recordings).
 #   Audio: AAC 96k mono (clear for voice, smaller files).
-#
-# NOTE — faster but larger alternative:
-#   Replace: -c:v libx265
-#   With:    -c:v libx264 -tune stillimage  (and set CRF to 20)
-#   H.264 encodes faster but files are typically 20–40% larger at equivalent quality.
 #
 # Compatibility:
 #   Written for macOS default Bash 3.2 (no mapfile/readarray). Works on Bash 5 too.

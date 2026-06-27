@@ -76,98 +76,118 @@ done
 suffix=" - compressed.mp4"
 
 # -----------------------------------------------------------------------------
-# Build file list: oldest -> newest, skipping already-compressed files
+# Validate input
 # -----------------------------------------------------------------------------
-files=()
-
 if [[ -f "$target_dir" ]]; then
-  # Single file passed
   f="$target_dir"
   if [[ "$f" != *.mp4 ]]; then
-    echo "Not an .mp4 file: $f" >&2
-    exit 1
+    echo "Not an .mp4 file: $f" >&2; exit 1
   fi
   case "$f" in
     *"$suffix") echo "Already a compressed file: $f" >&2; exit 1 ;;
   esac
-  files+=("$f")
+  dir_mode=false
 elif [[ -d "$target_dir" ]]; then
-  while IFS= read -r f; do
-    files+=("$f")
-  done < <(
-    ls -tU "$target_dir"/*.mp4 2>/dev/null \
-      | tail -r \
-      | grep -vF "$suffix" \
-      || true
-  )
+  dir_mode=true
 else
-  echo "Not a file or directory: $target_dir" >&2
-  exit 1
-fi
-
-if [[ ${#files[@]} -eq 0 ]]; then
-  echo "No .mp4 files found (or only already-compressed files)."
-  exit 0
+  echo "Not a file or directory: $target_dir" >&2; exit 1
 fi
 
 # -----------------------------------------------------------------------------
-# Main loop
+# Lockfile (directory mode only) — prevents concurrent instances from
+# processing the same files; the running instance drains the queue instead.
+# -----------------------------------------------------------------------------
+if $dir_mode; then
+  lockfile="/tmp/screenrec-compress-$(printf '%s' "$target_dir" | md5).lock"
+  exec 9>"$lockfile"
+  if ! flock -n 9; then
+    echo "Another instance is already running — it will process any new files."
+    exit 0
+  fi
+fi
+
+# -----------------------------------------------------------------------------
+# Main loop — in directory mode, re-scans after each pass to drain new arrivals
 # -----------------------------------------------------------------------------
 count=0
 skipped=0
+enc="${encoder%%:*}"
+preset="${encoder##*:}"
+[[ "$enc" == "$preset" ]] && preset="slow"
 
-for f in "${files[@]}"; do
-  out="${f%.mp4}$suffix"
+loglevel_flags=(-hide_banner -loglevel error)
+$progress && loglevel_flags=(-hide_banner)
 
-  if [[ -f "$out" ]] && ! $force; then
-    (( skipped += 1 ))
-    continue
-  fi
-
-  (( count += 1 ))
-
-  if $dry_run; then
-    echo "[dry-run] $f"
-    echo "       -> $out"
-    continue
-  fi
-
-  tmp="$(dirname "$out")/.$(basename "$out").tmp"
-  current_tmp="$tmp"
-
-  echo "$f"
-  echo "  -> $out"
-
-  loglevel_flags=(-hide_banner -loglevel error)
-  $progress && loglevel_flags=(-hide_banner)
-
-  enc="${encoder%%:*}"
-  preset="${encoder##*:}"
-  [[ "$enc" == "$preset" ]] && preset="slow"
-
-  if [[ "$enc" == "videotoolbox" ]]; then
-    ffmpeg -nostdin "${loglevel_flags[@]}" -i "$f" \
-      -c:v hevc_videotoolbox -q:v 65 -tag:v hvc1 \
-      -fps_mode vfr \
-      -c:a aac -b:a 96k -ac 1 \
-      -movflags +faststart \
-      "$tmp"
+while true; do
+  # Build file list for this pass
+  files=()
+  if $dir_mode; then
+    while IFS= read -r f; do
+      files+=("$f")
+    done < <(
+      ls -tU "$target_dir"/*.mp4 2>/dev/null \
+        | tail -r \
+        | grep -vF "$suffix" \
+        || true
+    )
   else
-    ffmpeg -nostdin "${loglevel_flags[@]}" -i "$f" \
-      -c:v libx265 -preset "$preset" -crf 24 -pix_fmt yuv420p -tag:v hvc1 -threads 0 \
-      -fps_mode vfr \
-      -c:a aac -b:a 96k -ac 1 \
-      -movflags +faststart \
-      "$tmp"
+    files+=("$target_dir")
   fi
 
-  touch -r "$f" "$tmp"
-  mv "$tmp" "$out"
-  current_tmp=""
+  new_this_pass=0
+
+  for f in ${files[@]+"${files[@]}"}; do
+    out="${f%.mp4}$suffix"
+
+    if [[ -f "$out" ]] && ! $force; then
+      continue
+    fi
+
+    (( count += 1 ))
+    (( new_this_pass += 1 ))
+
+    if $dry_run; then
+      echo "[dry-run] $f"
+      echo "       -> $out"
+      continue
+    fi
+
+    tmp="$(dirname "$out")/.$(basename "$out").tmp"
+    current_tmp="$tmp"
+
+    echo "$f"
+    echo "  -> $out"
+
+    if [[ "$enc" == "videotoolbox" ]]; then
+      ffmpeg -nostdin "${loglevel_flags[@]}" -i "$f" \
+        -c:v hevc_videotoolbox -q:v 65 -tag:v hvc1 \
+        -fps_mode vfr \
+        -c:a aac -b:a 96k -ac 1 \
+        -movflags +faststart \
+        "$tmp"
+    else
+      ffmpeg -nostdin "${loglevel_flags[@]}" -i "$f" \
+        -c:v libx265 -preset "$preset" -crf 24 -pix_fmt yuv420p -tag:v hvc1 -threads 0 \
+        -fps_mode vfr \
+        -c:a aac -b:a 96k -ac 1 \
+        -movflags +faststart \
+        "$tmp"
+    fi
+
+    touch -r "$f" "$tmp"
+    mv "$tmp" "$out"
+    current_tmp=""
+  done
+
+  # Single-file mode: always exit after one pass
+  # Directory mode: exit only when a full pass found nothing new to process
+  if ! $dir_mode || [[ $new_this_pass -eq 0 ]]; then
+    break
+  fi
 done
 
 if $dry_run; then
-  echo "Dry run: $count file(s) would be compressed, $skipped already done."
+  echo "Dry run: $count file(s) would be compressed."
 else
-  echo "Done: $count compressed, $skipped already done."
+  echo "Done: $count compressed."
 fi

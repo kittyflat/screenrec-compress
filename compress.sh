@@ -164,14 +164,14 @@ while true; do
         -fps_mode vfr \
         -c:a aac -b:a 96k -ac 1 \
         -movflags +faststart \
-        "$tmp"
+        -f mp4 "$tmp"
     else
       ffmpeg -nostdin "${loglevel_flags[@]}" -i "$f" \
         -c:v libx265 -preset "$preset" -crf 24 -pix_fmt yuv420p -tag:v hvc1 -threads 0 \
         -fps_mode vfr \
         -c:a aac -b:a 96k -ac 1 \
         -movflags +faststart \
-        "$tmp"
+        -f mp4 "$tmp"
     fi
 
     touch -r "$f" "$tmp"

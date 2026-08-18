@@ -11,6 +11,9 @@
 #   --dry-run              Show what would be compressed without doing anything.
 #   --force                Reprocess files that already have a compressed version.
 #   --progress             Show live ffmpeg encoding progress (time, speed, bitrate).
+#   --until HH:MM           Stop starting new files at/after this time today. The file
+#                            already encoding is not interrupted -- only the next file
+#                            in the queue is held back. For nightly off-hours runs.
 #   -h, --help             Show this message.
 #
 # Encoder (default: libx265:slow):
@@ -48,6 +51,7 @@ force=false
 progress=false
 encoder="libx265:slow"
 target_dir="."
+until_time=""
 
 # -----------------------------------------------------------------------------
 # Argument parsing
@@ -58,6 +62,7 @@ while [[ $# -gt 0 ]]; do
     --force)    force=true ;;
     --progress) progress=true ;;
     --encoder)  shift; encoder="$1" ;;
+    --until)    shift; until_time="$1" ;;
     -h|--help)
       sed -n '3,/^[^#]/{ /^#/{ s/^# \{0,1\}//; p }; /^[^#]/q }' "$0"
       exit 0
@@ -74,6 +79,18 @@ while [[ $# -gt 0 ]]; do
 done
 
 suffix=" - compressed.mp4"
+
+# -----------------------------------------------------------------------------
+# Deadline (--until) — computed once as today's date at HH:MM:SS, so it's a
+# fixed point in time to compare against as the batch runs.
+# -----------------------------------------------------------------------------
+deadline_epoch=""
+if [[ -n "$until_time" ]]; then
+  if ! deadline_epoch="$(date -j -f "%H:%M:%S" "${until_time}:00" "+%s" 2>/dev/null)"; then
+    echo "Invalid --until time: $until_time (expected HH:MM)" >&2
+    exit 1
+  fi
+fi
 
 # -----------------------------------------------------------------------------
 # Validate input
@@ -98,6 +115,10 @@ fi
 # processing the same files; the running instance drains the queue instead.
 # -----------------------------------------------------------------------------
 if $dir_mode; then
+  if ! command -v flock >/dev/null 2>&1; then
+    echo "flock is required for directory mode but is not installed (brew install flock)." >&2
+    exit 1
+  fi
   lockfile="/tmp/screenrec-compress-$(printf '%s' "$target_dir" | md5).lock"
   exec 9>"$lockfile"
   if ! flock -n 9; then
@@ -143,6 +164,11 @@ while true; do
       continue
     fi
 
+    if [[ -n "$deadline_epoch" ]] && (( $(date "+%s") >= deadline_epoch )); then
+      echo "Reached --until $until_time — stopping before starting: $f"
+      break 2
+    fi
+
     (( count += 1 ))
     (( new_this_pass += 1 ))
 
@@ -180,8 +206,12 @@ while true; do
   done
 
   # Single-file mode: always exit after one pass
-  # Directory mode: exit only when a full pass found nothing new to process
-  if ! $dir_mode || [[ $new_this_pass -eq 0 ]]; then
+  # Dry-run: always exit after one pass -- it never creates the output file
+  #   that the "already done" check relies on, so a second pass would just
+  #   find the same files "new" again and loop forever.
+  # Directory mode (non-dry-run): exit only when a full pass found nothing
+  #   new to process.
+  if ! $dir_mode || $dry_run || [[ $new_this_pass -eq 0 ]]; then
     break
   fi
 done

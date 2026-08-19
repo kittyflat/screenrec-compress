@@ -142,7 +142,11 @@ if $dir_mode; then
     echo "flock is required for directory mode but is not installed (brew install flock)." >&2
     exit 1
   fi
-  lockfile="/tmp/screenrec-compress-$(printf '%s' "$target_dir" | cksum | cut -d' ' -f1).lock"
+  # Canonicalize (resolve symlinks, make absolute) before hashing, so two
+  # invocations naming the same real directory differently -- relative vs.
+  # absolute, trailing slash, a symlink -- still share the same lock.
+  canonical_dir="$(cd "$target_dir" && pwd -P)"
+  lockfile="/tmp/screenrec-compress-$(printf '%s' "$canonical_dir" | cksum | cut -d' ' -f1).lock"
   exec 9>"$lockfile"
   if ! flock -n 9; then
     echo "Another instance is already running — it will process any new files."

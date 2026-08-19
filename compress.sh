@@ -81,6 +81,29 @@ done
 suffix=" - compressed.mp4"
 
 # -----------------------------------------------------------------------------
+# Dedicated binaries (setup-fda-binaries.sh) — under launchd, a headless
+# process touching an external volume needs Full Disk Access, and that
+# can't safely be granted to the shared system/Homebrew binaries (used by
+# everything else). If dedicated re-signed copies exist alongside this
+# script, prefer them; otherwise fall back to PATH (fine for interactive
+# runs, which don't hit the TCC restriction at all).
+# -----------------------------------------------------------------------------
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+project_name="$(basename "$script_dir")"
+resolve_bin() {
+  local name="$1" dedicated="$script_dir/bin/${project_name}-$1"
+  if [[ -x "$dedicated" ]]; then
+    printf '%s' "$dedicated"
+  else
+    printf '%s' "$name"
+  fi
+}
+ffmpeg_bin="$(resolve_bin ffmpeg)"
+touch_bin="$(resolve_bin touch)"
+mv_bin="$(resolve_bin mv)"
+ls_bin="$(resolve_bin ls)"
+
+# -----------------------------------------------------------------------------
 # Deadline (--until) — computed once as today's date at HH:MM:SS, so it's a
 # fixed point in time to compare against as the batch runs.
 # -----------------------------------------------------------------------------
@@ -119,7 +142,7 @@ if $dir_mode; then
     echo "flock is required for directory mode but is not installed (brew install flock)." >&2
     exit 1
   fi
-  lockfile="/tmp/screenrec-compress-$(printf '%s' "$target_dir" | md5).lock"
+  lockfile="/tmp/screenrec-compress-$(printf '%s' "$target_dir" | cksum | cut -d' ' -f1).lock"
   exec 9>"$lockfile"
   if ! flock -n 9; then
     echo "Another instance is already running — it will process any new files."
@@ -146,7 +169,7 @@ while true; do
     while IFS= read -r f; do
       files+=("$f")
     done < <(
-      ls -tU "$target_dir"/*.mp4 2>/dev/null \
+      "$ls_bin" -tU "$target_dir"/*.mp4 2>/dev/null \
         | tail -r \
         | grep -vF "$suffix" \
         || true
@@ -185,14 +208,14 @@ while true; do
     echo "  -> $out"
 
     if [[ "$enc" == "videotoolbox" ]]; then
-      ffmpeg -nostdin "${loglevel_flags[@]}" -i "$f" \
+      "$ffmpeg_bin" -nostdin "${loglevel_flags[@]}" -i "$f" \
         -c:v hevc_videotoolbox -q:v 65 -tag:v hvc1 \
         -fps_mode vfr \
         -c:a aac -b:a 96k -ac 1 \
         -movflags +faststart \
         -f mp4 "$tmp"
     else
-      ffmpeg -nostdin "${loglevel_flags[@]}" -i "$f" \
+      "$ffmpeg_bin" -nostdin "${loglevel_flags[@]}" -i "$f" \
         -c:v libx265 -preset "$preset" -crf 24 -pix_fmt yuv420p -tag:v hvc1 -threads 0 \
         -fps_mode vfr \
         -c:a aac -b:a 96k -ac 1 \
@@ -200,8 +223,8 @@ while true; do
         -f mp4 "$tmp"
     fi
 
-    touch -r "$f" "$tmp"
-    mv "$tmp" "$out"
+    "$touch_bin" -r "$f" "$tmp"
+    "$mv_bin" "$tmp" "$out"
     current_tmp=""
   done
 

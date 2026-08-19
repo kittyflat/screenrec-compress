@@ -68,7 +68,7 @@ connected to a Mac that stays on (e.g. a home server).
 | Template | Trigger | Trade-off |
 |---|---|---|
 | `com.user.screenrec-compress-watch.plist` | Fires on any change in the watched directory (`WatchPaths`) | Compresses almost immediately, but competes with you for CPU/disk while the machine is in use. |
-| `com.user.screenrec-compress-nightly.plist` | Fires once nightly at a fixed time (`StartCalendarInterval`, default 3:00am–7:00am via `--until`) | Keeps compression off-hours so it doesn't slow you down, but new files wait until the next scheduled run. |
+| `com.user.screenrec-compress-nightly.plist` | Fires once nightly at a fixed time (`StartCalendarInterval`, default 2:00am–7:00am via `--until`) | Keeps compression off-hours so it doesn't slow you down, but new files wait until the next scheduled run. |
 
 **Why launchd over a Python file watcher?** No long-running process to keep
 alive — `compress.sh` handles the coarseness of both triggers by scanning
@@ -84,7 +84,24 @@ the directory and skipping already-done files on every run.
    brew install ffmpeg flock
    ```
 
-2. **Copy the plist you want** to your LaunchAgents folder (rename to
+2. **Run `./setup-fda-binaries.sh` and grant Full Disk Access.** A headless
+   launchd process touching an external/removable volume needs Full Disk
+   Access (macOS TCC) — without it, `compress.sh` doesn't error, it just
+   hangs indefinitely (see Notes below). This script makes dedicated,
+   re-signed copies of the five binaries that touch the volume (`bash`,
+   `ffmpeg`, `touch`, `mv`, `ls`) in `bin/`, so you can grant access to just
+   those copies instead of to the shared system/Homebrew binaries every
+   other script on your Mac also uses:
+   ```bash
+   ./setup-fda-binaries.sh
+   ```
+   It opens System Settings for you — add all 5 paths it prints under
+   **Privacy & Security → Full Disk Access**. Re-run this script (and
+   nothing else) after `brew upgrade`ing ffmpeg or bash to refresh the
+   copies; the grant itself doesn't need to be redone since the identifier
+   stays the same.
+
+3. **Copy the plist you want** to your LaunchAgents folder (rename to
    `com.user.screenrec-compress.plist` if you'd rather not manage the
    `-watch`/`-nightly` suffix — the filename doesn't need to match the
    `Label` inside):
@@ -94,21 +111,22 @@ the directory and skipping already-done files on every run.
    cp com.user.screenrec-compress-nightly.plist ~/Library/LaunchAgents/
    ```
 
-3. **Edit the copy** — open the file under `~/Library/LaunchAgents/` and
-   replace the `YOUR_*` placeholders with real paths (for the nightly
+4. **Edit the copy** — open the file under `~/Library/LaunchAgents/` and
+   replace the `YOUR_*` placeholders with real paths, including the
+   `bin/screenrec-compress-bash` path near the top of `ProgramArguments` (for the nightly
    template, also adjust `Hour`/`Minute` and the `--until` argument
-   together if 3:00am–7:00am isn't the window you want). Editing the copy
+   together if 2:00am–7:00am isn't the window you want). Editing the copy
    — not the one in this repo — keeps the checked-in file a generic
    template instead of picking up your machine-specific paths.
 
-4. **Load the agent** (use whichever filename you copied):
+5. **Load the agent** (use whichever filename you copied):
    ```bash
    launchctl load ~/Library/LaunchAgents/com.user.screenrec-compress-watch.plist
    # or
    launchctl load ~/Library/LaunchAgents/com.user.screenrec-compress-nightly.plist
    ```
 
-5. **Check the log.** Each template writes to its own log
+6. **Check the log.** Each template writes to its own log
    (`screenrec-compress-watch.log` / `screenrec-compress-nightly.log`), so
    the two don't interleave. launchd only creates the log file the first
    time the agent actually runs, and macOS `tail -f` errors out (rather than
@@ -134,7 +152,20 @@ launchctl unload ~/Library/LaunchAgents/com.user.screenrec-compress-nightly.plis
 ### Notes
 
 - The agent runs as your user, not root — it has access to anything your user
-  can access, including mounted volumes.
+  can access, including mounted volumes, *once Full Disk Access is granted*
+  (see step 2). Without it, a headless launchd process reading an external
+  volume gets silently blocked by macOS's privacy protections (TCC):
+  Apple-signed binaries (`/bin/bash`, `/usr/bin/touch`, `/bin/mv`, `/bin/ls`)
+  fail instantly, but non-Apple-signed ones (Homebrew's `bash`/`ffmpeg`)
+  instead hang forever, because TCC tries to show a permission prompt and a
+  background agent has no window to show it in. This is why the plists
+  invoke `bin/screenrec-compress-bash` directly instead of relying on
+  `compress.sh`'s own `#!/usr/bin/env bash` shebang, and why `compress.sh`
+  resolves `ffmpeg`, `touch`, `mv`, and `ls` from `bin/` (as
+  `screenrec-compress-ffmpeg`, etc.) when present. The project-name prefix
+  keeps each entry legible in the Full Disk Access list, which only shows
+  filenames — no path column — so a plain "bash" from two different
+  projects would otherwise be indistinguishable there.
 - launchd runs agents with a minimal environment (no PATH). The plist sets
   `PATH` explicitly to include `/opt/homebrew/bin` where Homebrew installs
   ffmpeg. If you installed ffmpeg elsewhere, update that line.

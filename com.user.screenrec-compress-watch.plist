@@ -17,8 +17,14 @@
     <string>/Volumes/YOUR_DRIVE/Screen Recordings</string>
   </array>
 
+  <!-- Invokes the dedicated bin/bash (from setup-fda-binaries.sh) directly, -->
+  <!-- rather than relying on compress.sh's own shebang -- launchd's exec    -->
+  <!-- would otherwise resolve #!/usr/bin/env bash to the shared Homebrew    -->
+  <!-- bash, which is not the identity Full Disk Access was granted to.      -->
   <key>ProgramArguments</key>
   <array>
+    <!-- EDIT: set this to the absolute path of bin/screenrec-compress-bash on this machine. -->
+    <string>/Users/YOUR_USERNAME/Projects/screenrec-compress/bin/screenrec-compress-bash</string>
     <!-- EDIT: set this to the absolute path of compress.sh on this machine. -->
     <string>/Users/YOUR_USERNAME/Projects/screenrec-compress/compress.sh</string>
     <!-- EDIT: same path as WatchPaths above. -->
